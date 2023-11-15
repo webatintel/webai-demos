@@ -1,0 +1,197 @@
+<body>
+  <h1 align="center">ORT WebGPU Smoke Testing</h1>
+  <h2 align="center" id="status"></h2>
+  <text>
+    <b>Usage</b>
+    <p>Chrome options: '--enable-dawn-features=use_dxc --enable-features=SharedArrayBuffer'</p>
+    <li>--enable-dawn-features=use_dxc: Enable DXC instead of FXC for WGSL compilation</li>
+    <li>
+      --enable-features=SharedArrayBuffer: Enable SharedArrayBuffer otherwise you may get 'TypeError: Cannot convert a
+      BigInt value to a number'
+    </li>
+
+    <p>
+      If your web server supports wasm multiple threads, ort-wasm-simd-threaded.jsep.[js|wasm] will be called by
+      ort.webgpu.min.js, which may be different from your build. You may set wasmThreads=1 to fall back to
+      ort-wasm-simd.jsep.[js|wasm].
+    </p>
+
+    <p>
+      If you encounter cross origin issue, you may install Chrome extension "CORS Unblock"
+      (https://chrome.google.com/webstore/detail/cors-unblock/lfhmikememgdcahcdlaciloancbhjino?hl=en) and enable it.
+    </p>
+
+    <p>
+      To manage OPFS (Origin Private File System), you may install Chrome extension OPFS Explorer:
+      https://chrome.google.com/webstore/detail/opfs-explorer/acndjpgkpaclldomagafnognkcgjignd
+    </p>
+
+    <p>
+      Some parameters are supported in url, and you may use them as 'index.html?key0=value0&key1=value1...'. Supported
+      parameters are:
+    </p>
+    <li>ep: execution provider. E.g., webgpu, wasm</li>
+    <li>modelName: name of modelName. E.g., mobilenetv2</li>
+    <li>runTimes: Run times</li>
+    <li>
+      tasks=[task0,task1,task2]: tasks to run, split by ','. Candidates are 'conformance', 'performance',
+      'ortProfiling', 'webgpuProfiling'.
+    </li>
+    <li>updateModel=[true|false]. False (default) means no update.</li>
+    <li>warmupTimes: Warmup times</li>
+    <li>wasmThreads: wasm threads number</li>
+    <li>
+      Example:
+      https://localhost:8000/?tasks=conformance&modelName=mobilenetv2&ep=webgpu&warmupTimes=10&runTimes=10
+    </li>
+    <p></p>
+    <b>Test Results</b>
+  </text>
+  <script src="../util/util.js"></script>
+  <script src="ort.webgpu.min.js"></script>
+  <script>
+    "use strict";
+
+    // url parameters
+    const ep = getParam("ep") || "webgpu";
+    const modelName = getParam("modelName") || "model.onnx";
+    const optLevel = getParam("optLevel") || "all"; // basic, all, disabled, extended
+    let runTimes = getParam("runTimes") || 10;
+    runTimes = parseInt(runTimes);
+    const tasks = getParam("tasks") || "performance";
+    const updateModel = getParam("updateModel") === "true" || false;
+    let warmupTimes = getParam("warmupTimes") || 10;
+    warmupTimes = parseInt(warmupTimes);
+    const wasmThreads = parseInt(getParam("wasmThreads")) || 4;
+
+    // feeds need to be fit to your model
+    const feeds = {
+      a: getTensor('float32', 'random', [3, 4]),
+      b: getTensor('float32', 'random', [4, 3])
+    }
+
+    async function main() {
+      for (let task of tasks.split(",")) {
+        if (task === "conformance") {
+          let epOutput = await runTask("conformance", ep);
+          let wasmOutput = await runTask("conformance", "wasm");
+          renderTask(task, [epOutput, wasmOutput]);
+        } else if (task === 'performance') {
+          let times = await runTask(task, ep);
+          renderTask(task, times);
+        }
+        reportStatus(`Finished task ${task}`);
+      }
+    }
+
+    async function runTask(task, ep) {
+      let sessionStartTime = performance.now();
+      let times = [];
+      let totalTime = 0;
+      let elapsedTime;
+
+      let layout;
+      if (layout === null) {
+        if (ep === "webgpu") {
+          layout = "NHWC";
+        } else {
+          layout = "";
+        }
+      }
+
+      let device = getParam("device") || "gpu";
+      if (ep === "webgpu") {
+        device = "gpu";
+      }
+
+      const option = {
+        executionProviders: [
+          {
+            name: ep,
+            deviceType: device,
+            preferredLayout: layout,
+          },
+        ],
+        graphOptimizationLevel: optLevel,
+      };
+
+      if (ep === "webgpu" && task !== "conformance") {
+        option.preferredOutputLocation = "gpu-buffer";
+      }
+
+      // Set env
+      ort.env.wasm.simd = true;
+      ort.env.wasm.numThreads = wasmThreads;
+
+      const sessionCreateStartTime = performance.now();
+      let modelBuffer = await getModelOPFS(modelName, modelName, updateModel);
+      const session = await ort.InferenceSession.create(modelBuffer, option);
+      elapsedTime = parseFloat((performance.now() - sessionCreateStartTime).toFixed(2));
+      console.info(`${elapsedTime}ms was used to create session`);
+
+      for (let i = 0; i < warmupTimes + runTimes; i++) {
+        if (!sessionStartTime) {
+          sessionStartTime = performance.now();
+        }
+        reportStatus(`Running task ${task} ${i} ...`);
+
+        let results = await session.run(feeds);
+        if (ep === "webgpu" && task !== "conformance") {
+          await ort.env.webgpu.device.queue.onSubmittedWorkDone();
+        }
+
+        if (task === "conformance") {
+          let result = results[session.outputNames[0]]["data"];
+          session.release();
+          return result;
+        }
+        if (i === 0 || i >= warmupTimes) {
+          const elapsedTime = parseFloat((performance.now() - sessionStartTime).toFixed(2));
+          times.push(elapsedTime);
+        }
+        sessionStartTime = null;
+      }
+
+      session.release();
+      return times;
+    }
+
+    function renderTask(task, data) {
+      let taskElement = document.createElement("p");
+      document.body.appendChild(taskElement);
+      taskElement.innerText = `[${task} results]`;
+
+      let resultElement = document.createElement("p");
+      document.body.appendChild(resultElement);
+      resultElement.id = "result";
+      let result = {};
+
+      if (task === "conformance") {
+        result["result"] = compare(data[0], data[1]);
+
+        for (let i = 0; i < data.length; i++) {
+          console.info(data[i]);
+        }
+      } else if (task === "performance") {
+        let details = data.join(", ");
+        let detailsElement = document.createElement("p");
+        document.body.appendChild(detailsElement);
+        detailsElement.innerText = details;
+
+        result["first"] = data[0];
+        data.shift();
+        let totalTime = getSum(data);
+        let averageTime = parseFloat((totalTime / data.length).toFixed(2));
+        result["average"] = averageTime;
+        result["best"] = Math.min(...data);
+      }
+
+      if (task === "conformance" || task === "performance") {
+        resultElement.innerText = JSON.stringify(result);
+        return;
+      }
+    }
+
+    main();
+  </script>
+</body>
