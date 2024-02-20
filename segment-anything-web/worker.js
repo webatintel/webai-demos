@@ -1,4 +1,5 @@
-import { env, SamModel, AutoProcessor, RawImage, Tensor } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.14.0';
+//import { env, SamModel, AutoProcessor, RawImage, Tensor } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.14.0';
+import {AutoProcessor, env, RawImage, SamModel, Tensor} from 'https://wp-27.sh.intel.com/workspace/project/transformers.js/dist/transformers.min.js';
 
 // Since we will download the model from the Hugging Face Hub, we can skip the local model check
 env.allowLocalModels = false;
