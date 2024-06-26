@@ -1,0 +1,60 @@
+<div>
+  <div>Status: </div>
+  <div id="status"></div>
+  <div id="averageWordSpeed"></div>
+  <div id="average"></div>
+  <p></p>
+  <div id="input">Prompt: Write me an extra-long poem</div>
+  <p></p>
+  <div>Output:</div>
+  <div id="output"></div>
+</div>
+<script type="module">
+  "use strict";
+
+  //import { FilesetResolver, LlmInference } from "./tasks-genai.js";
+  async function main() {
+    const canCreate = await window.ai.canCreateTextSession();
+    if (canCreate === "no") {
+      document.getElementById("status").innerHTML = "Can't create a session";
+      return;
+    }
+
+    const session = await window.ai.createTextSession();
+    const input = document.getElementById("input").innerHTML;
+    const outputElement = document.getElementById("output");
+    const averageWordSpeedElement = document.getElementById("averageWordSpeed");
+    let previousLength = 0;
+    const stream = session.promptStreaming(input);
+    const startTime = performance.now();
+    let endTime, elapsedTime, wordCount, averageWordSpeed;
+    for await (const chunk of stream) {
+      endTime = performance.now();
+      elapsedTime = endTime - startTime;
+      outputElement.innerHTML += chunk.slice(previousLength);
+      previousLength = chunk.length;
+      wordCount = chunk.split(/\s+/).length;
+      averageWordSpeed = (wordCount / (elapsedTime / 1000)).toFixed(2);
+      averageWordSpeedElement.innerHTML = `Average Word Speed: ${averageWordSpeed} words/s`;
+    }
+
+    // TODO: Use Gemma's tokenizer
+    /*
+    let llmInference;
+    const modelFileName = "gemma-2b-it-gpu-int4.bin";
+    const genaiFileset = await FilesetResolver.forGenAiTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai/wasm");
+    LlmInference.createFromOptions(genaiFileset, {
+      baseOptions: { modelAssetPath: modelFileName },
+    })
+      .then((llm) => {
+        llmInference = llm;
+      })
+      .catch(() => {
+        alert("Failed to initialize the task.");
+      });
+    */
+  }
+
+  main();
+
+</script>
