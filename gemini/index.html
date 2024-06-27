@@ -2,7 +2,7 @@
   <div>Status: </div>
   <div id="status"></div>
   <div id="averageWordSpeed"></div>
-  <div id="average"></div>
+  <div id="averageTokenSpeed"></div>
   <p></p>
   <div id="input">Prompt: Write me an extra-long poem</div>
   <p></p>
@@ -12,7 +12,8 @@
 <script type="module">
   "use strict";
 
-  //import { FilesetResolver, LlmInference } from "./tasks-genai.js";
+  import { env, AutoTokenizer } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers';
+
   async function main() {
     const canCreate = await window.ai.canCreateTextSession();
     if (canCreate === "no") {
@@ -24,6 +25,7 @@
     const input = document.getElementById("input").innerHTML;
     const outputElement = document.getElementById("output");
     const averageWordSpeedElement = document.getElementById("averageWordSpeed");
+    const averageTokenSpeedElement = document.getElementById("averageTokenSpeed");
     let previousLength = 0;
     const stream = session.promptStreaming(input);
     const startTime = performance.now();
@@ -38,21 +40,12 @@
       averageWordSpeedElement.innerHTML = `Average Word Speed: ${averageWordSpeed} words/s`;
     }
 
-    // TODO: Use Gemma's tokenizer
-    /*
-    let llmInference;
-    const modelFileName = "gemma-2b-it-gpu-int4.bin";
-    const genaiFileset = await FilesetResolver.forGenAiTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai/wasm");
-    LlmInference.createFromOptions(genaiFileset, {
-      baseOptions: { modelAssetPath: modelFileName },
-    })
-      .then((llm) => {
-        llmInference = llm;
-      })
-      .catch(() => {
-        alert("Failed to initialize the task.");
-      });
-    */
+    env.allowLocalModels = false;
+    const tokenizer = await AutoTokenizer.from_pretrained('Xenova/gemma-tokenizer');
+    const tokenIds = tokenizer.encode(outputElement.innerHTML);
+    const tokenCount = tokenIds.length;
+    const averageTokenSpeed = (tokenCount / (elapsedTime / 1000)).toFixed(2);
+    averageTokenSpeedElement.innerHTML = `Average Token Speed: ${averageTokenSpeed} tokens/s`;
   }
 
   main();
