@@ -1,12 +1,12 @@
 // Get model via Origin Private File System
-async function getModelOPFS(name, url, updateModel=false) {
+async function getModelOPFS(name, url, updateModel = false) {
   const root = await navigator.storage.getDirectory();
   let fileHandle;
 
   async function updateFile() {
     const response = await fetch(url);
     const buffer = await readResponse(response);
-    fileHandle = await root.getFileHandle(name, {create: true});
+    fileHandle = await root.getFileHandle(name, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(buffer);
     await writable.close();
@@ -21,7 +21,7 @@ async function getModelOPFS(name, url, updateModel=false) {
     fileHandle = await root.getFileHandle(name);
     const blob = await fileHandle.getFile();
     return await blob.arrayBuffer();
-  } catch(e) {
+  } catch (e) {
     return await updateFile();
   }
 }
@@ -38,7 +38,7 @@ function getParam(name) {
 }
 
 function getSum(data) {
-  return data.reduce((accumulator, currentValue) => {return accumulator + currentValue}, 0);
+  return data.reduce((accumulator, currentValue) => { return accumulator + currentValue }, 0);
 }
 
 function getTensor(type, data, dims) {
@@ -66,11 +66,11 @@ function getTensor(type, data, dims) {
       size *= dim;
     });
     if (data === 'random') {
-      _data = typedArray.from({length: size}, () => Math.random());
+      _data = typedArray.from({ length: size }, () => Math.random());
     } else if (data === 'ramp') {
-      _data = typedArray.from({length: size}, (_, i) => i);
+      _data = typedArray.from({ length: size }, (_, i) => i);
     } else {
-      _data = typedArray.from({length: size}, () => data);
+      _data = typedArray.from({ length: size }, () => data);
     }
   }
   return new ort.Tensor(type, _data, dims);
@@ -140,4 +140,14 @@ async function readResponse(response) {
 
 function reportStatus(status) {
   document.getElementById('status').innerHTML = status;
+}
+
+function getModelPath() {
+  url = window.location.href;
+  if (url.search('wp-27') > -1) {
+    modelUrl = `https://wp-27.sh.intel.com/workspace/project/models/`;
+  } else {
+    modelUrl = `https://huggingface.co/onnxruntime/models/resolve/main/`;
+  }
+  return modelUrl;
 }
