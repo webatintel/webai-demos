@@ -15,13 +15,14 @@
   import { env, AutoTokenizer } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers';
 
   async function main() {
-    const canCreate = await window.ai.canCreateTextSession();
-    if (canCreate === "no") {
-      document.getElementById("status").innerHTML = "Can't create a session";
+    const { available, defaultTemperature, defaultTopK, maxTopK } = await ai.assistant.capabilities();
+
+    if (available === 'no') {
+      console.log('AI assistant is not available');
       return;
     }
 
-    const session = await window.ai.createTextSession();
+    const session = await ai.assistant.create();
     const input = document.getElementById("input").innerHTML;
     const outputElement = document.getElementById("output");
     const averageWordSpeedElement = document.getElementById("averageWordSpeed");
@@ -37,7 +38,7 @@
       previousLength = chunk.length;
       wordCount = chunk.split(/\s+/).length;
       averageWordSpeed = (wordCount / (elapsedTime / 1000)).toFixed(2);
-      averageWordSpeedElement.innerHTML = `Average Word Speed: ${averageWordSpeed} words/s`;
+      averageWordSpeedElement.innerHTML = `Average Words Per Second: ${averageWordSpeed}`;
     }
 
     env.allowLocalModels = false;
@@ -45,7 +46,7 @@
     const tokenIds = tokenizer.encode(outputElement.innerHTML);
     const tokenCount = tokenIds.length;
     const averageTokenSpeed = (tokenCount / (elapsedTime / 1000)).toFixed(2);
-    averageTokenSpeedElement.innerHTML = `Average Token Speed: ${averageTokenSpeed} tokens/s`;
+    averageTokenSpeedElement.innerHTML = `Average Tokens Per Second: ${averageTokenSpeed}`;
   }
 
   main();
