@@ -1,8 +1,8 @@
 <div>
   <div>Status: </div>
   <div id="status"></div>
-  <div id="averageWordSpeed"></div>
-  <div id="averageTokenSpeed"></div>
+  <div id="wps"></div>
+  <div id="tps"></div>
   <p></p>
   <div id="input">Prompt: Write me an extra-long poem</div>
   <p></p>
@@ -25,28 +25,28 @@
     const session = await ai.assistant.create();
     const input = document.getElementById("input").innerHTML;
     const outputElement = document.getElementById("output");
-    const averageWordSpeedElement = document.getElementById("averageWordSpeed");
-    const averageTokenSpeedElement = document.getElementById("averageTokenSpeed");
+    const wpsElement = document.getElementById("wps");
+    const tpsElement = document.getElementById("tps");
     let previousLength = 0;
     const stream = session.promptStreaming(input);
     const startTime = performance.now();
-    let endTime, elapsedTime, wordCount, averageWordSpeed;
+    let endTime, elapsedTime, wordCount, wps;
     for await (const chunk of stream) {
       endTime = performance.now();
       elapsedTime = endTime - startTime;
       outputElement.innerHTML += chunk.slice(previousLength);
       previousLength = chunk.length;
       wordCount = chunk.split(/\s+/).length;
-      averageWordSpeed = (wordCount / (elapsedTime / 1000)).toFixed(2);
-      averageWordSpeedElement.innerHTML = `Average Words Per Second: ${averageWordSpeed}`;
+      wps = (wordCount / (elapsedTime / 1000)).toFixed(2);
+      wpsElement.innerHTML = `words/s: ${wps}`;
     }
 
     env.allowLocalModels = false;
     const tokenizer = await AutoTokenizer.from_pretrained('Xenova/gemma-tokenizer');
     const tokenIds = tokenizer.encode(outputElement.innerHTML);
     const tokenCount = tokenIds.length;
-    const averageTokenSpeed = (tokenCount / (elapsedTime / 1000)).toFixed(2);
-    averageTokenSpeedElement.innerHTML = `Average Tokens Per Second: ${averageTokenSpeed}`;
+    const tps = (tokenCount / (elapsedTime / 1000)).toFixed(2);
+    tpsElement.innerHTML = `tokens/s: ${tps}`;
   }
 
   main();
