@@ -1,0 +1,33 @@
+div#prompt {
+    background-color: azure;
+    padding: 0.25em 1em;
+}
+
+div#prompt.already-set::before {
+    content: "Prompt:";
+    display: block;
+    margin-left: -0.25em;
+    margin-bottom: 0.5em;
+    color: crimson;
+}
+
+div#result {
+    background-color: blanchedalmond;
+    padding: 0.25em 1em;
+}
+
+div#result.already-set::before {
+    content: "Output tokens:";
+    display: block;
+    margin-left: -0.25em;
+    margin-bottom: 0.5em;
+    color: crimson;
+}
+
+span.output-token-span.counter-0 {
+    background-color: greenyellow;
+}
+
+span.output-token-span.counter-1 {
+    background-color: aquamarine;
+}

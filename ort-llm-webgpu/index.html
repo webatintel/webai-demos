@@ -1,0 +1,551 @@
+<head>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="sortable.min.css" />
+  <link rel="stylesheet" href="profilingDisplayer.css" />
+</head>
+
+<body>
+
+  <!-- util.js from /workspace/project/webai-dev/util/util.js -->
+  <script src="util.js"></script>
+  <script src="sortable.min.js"></script>
+  <script src="profilingDisplayer.js"></script>
+  <script>
+    // UI helper functions
+    function setPrompt(prompt) {
+      const promptDiv = document.getElementById('prompt');
+      promptDiv.classList.add('already-set');
+      promptDiv.innerText = prompt;
+    }
+
+    let resultDivStatus = 0;  // 0: Reset/Uninitialized, 1: Already set
+    let tokenSpanCounter = 0;
+    function resetLLMOutputs() {
+      const resultDiv = document.getElementById('result');
+      // resultDiv.classList.remove('already-set');
+      resultDiv.className = '';
+      const children = resultDiv.childNodes;
+      children.forEach(node => resultDiv.removeChild(node));
+      resultDivStatus = 0;
+    }
+    function pushLLMOutput(word) {
+      const resultDiv = document.getElementById('result');
+      if (resultDivStatus === 0) {
+        resultDiv.className = 'already-set';
+        resultDivStatus = 1;
+      }
+      const tokenSpan = document.createElement('span');
+      tokenSpan.className = `output-token-span counter-${tokenSpanCounter}`;
+      tokenSpan.innerText = word;
+      tokenSpanCounter = tokenSpanCounter ^ 1;
+      resultDiv.appendChild(tokenSpan);
+      // words.push(word);
+    }
+  </script>
+  <script type="module">
+    "use scrict";
+
+    function getModelFilesUrl(config, model) {
+      let modelUrl = config.modelUrl || 'wp-27';
+      const modelBaseUrl = getModelBaseUrl(config, model);
+      return {
+        configFileUrl: `${modelBaseUrl}/${model.configFileRelatedPath}`,
+        modelOnnxFileUrl: `${modelBaseUrl}/${model.modelOnnxFileRelatedPath}`,
+        externalDataFileUrl: model.externalDataFileRelatedPath ? `${modelBaseUrl}/${model.externalDataFileRelatedPath}` : undefined,
+      };
+    }
+
+    await loadOrt();
+    // Transformer in /workspace/project/transformers.js/dist/transformers.js
+    import { AutoTokenizer, env } from '../../transformers.js/dist/transformers.js';
+
+    function logToConsoleAndPage(i) { console.log(i); document.getElementById('status').innerText += `\n${i}`; }
+
+    const phiModelsPromptBuilder = (query) => `User:${query}\nAssistant:`;
+    const MODELS = {
+      "phi3": {
+        name: "phi3",
+        hfTreeFullName: "webai-community/models",
+        wp27TreeFullName: ".",
+        configFileRelatedPath: "phi3-int4/config.json",
+        modelOnnxFileRelatedPath: "phi3-int4/phi3-int4.onnx",
+        externalDataFileRelatedPath: "phi3-int4/phi3-int4.data",
+        externalDataFileRuntimePath: "decoder_model_merged.onnx.data",
+        pretrainedTokenizerName: "phi3-int4",
+        promptBuilder: phiModelsPromptBuilder,
+      },
+      "phi2": {
+        name: "phi2",
+        hfTreeFullName: "webai-community/models",
+        wp27TreeFullName: ".",
+        configFileRelatedPath: "phi2-int4/config.json",
+        modelOnnxFileRelatedPath: "phi2-int4/phi2-int4.onnx",
+        pretrainedTokenizerName: "phi2-int4",
+        promptBuilder: phiModelsPromptBuilder,
+      },
+      "tinyllama": {
+        name: "tinyllama",
+        hfTreeFullName: "schmuell/TinyLlama-1.1B-Chat-v1.0-int4",
+        configFileRelatedPath: "config.json",
+        modelOnnxFileRelatedPath: "onnx/decoder_model_merged.onnx",
+        // pretrainedTokenizerName: "schmuell/TinyLlama-1.1B-Chat-v1.0-int4", 
+        pretrainedTokenizerName: "tinyllama",
+      },
+      "tinyllama_fp16": {
+        name: "tinyllama-fp16",
+        hfTreeFullName: "schmuell/TinyLlama-1.1B-Chat-v1.0-fp16",
+        configFileRelatedPath: "config.json",
+        modelOnnxFileRelatedPath: "onnx/decoder_model_merged.onnx",
+        externalDataFileRelatedPath: "onnx/decoder_model_merged.onnx.data",
+        externalDataFileRuntimePath: "decoder_model_merged.onnx.data",
+        // pretrainedTokenizerName: "schmuell/TinyLlama-1.1B-Chat-v1.0-fp16", 
+        pretrainedTokenizerName: "tinyllama",
+      },
+    }
+
+    function getConfig() {
+      const query = window.location.search.substring(1);
+      var config = {
+        model: "phi3",
+        modelUrl: "wp-27",
+        ortUrl: "default",
+        // ORT backend
+        provider: "webgpu",
+        // Stop generation after decoding tokens
+        maxDecodeTokens: 256,
+        // Profiler, 0 for not profiling, 1 for WebGPU profiling
+        profiler: 0,
+        // Control the WebGPU profiler, if used
+        WebGPUProfileBeginToken: 0,
+        WebGPUProfileEndToken: 0,
+        // verbose != 0 make ort.env.logLevel = "verbose" and ort.env.debug = true
+        verbose: 0,
+        // trace != 0 make ort.env.trace = true
+        trace: 0,
+        // csv: 0,
+        // Transformer.js tokenizer download
+        allowLocalTokenizer: 1,
+        allowRemoteTokenizer: 1,
+        // ort.env.wasm.numThreads
+        threads: 1,
+      }
+      let vars = query.split("&");
+      for (var i = 0; i < vars.length; i++) {
+        let pair = vars[i].split("=");
+        const key = pair[0];
+        const value = decodeURIComponent(pair[1]);
+        if (key in config) {
+          if (typeof config[key] == "number") {
+            config[key] = parseInt(value);
+          }
+          else {
+            config[key] = value;
+          }
+        } else if (key.length > 0) {
+          // throw new Error("unknown argument: " + pair[0]);
+          logToConsoleAndPage(`unknown argument: ${key}${value ? `=${value}` : ''}`);
+        }
+      }
+      if (MODELS[config.model] !== undefined) {
+        config.model = MODELS[config.model];
+      }
+      return config;
+    }
+
+    class LLM {
+      sess = undefined;
+      profiler = false;
+      trace = false;
+      feed = {};
+      output_tokens = [];
+      eos = 2;
+      need_position_ids = true;
+      stop = false;
+      kv_dims = [];
+      dtype = "float16";
+      generatingPerf = {
+        // startTime
+        // firstTokenDoneTime
+        // allTokensDoneTime
+        // promptTokens
+        // decodedTokens
+      };
+
+      constructor() {
+      }
+
+      async load(model, options) {
+        const provider = options.provider || "webgpu";
+        const verbose = options.verbose;
+        const local = options.local;
+        this.profiler = options.profiler;
+        this.trace = options.trace;
+
+        const modelFilesUrl = getModelFilesUrl(config, model);
+
+        logToConsoleAndPage(`loading... ${model.name},  ${provider}`);
+        const json_bytes = await fetchAndCache(modelFilesUrl.configFileUrl, logToConsoleAndPage);
+        let textDecoder = new TextDecoder();
+        const model_config = JSON.parse(textDecoder.decode(json_bytes));
+
+        const model_bytes = await fetchAndCache(modelFilesUrl.modelOnnxFileUrl, logToConsoleAndPage);
+        const externalData = (modelFilesUrl.externalDataFileUrl) ? await fetchAndCache(modelFilesUrl.externalDataFileUrl, logToConsoleAndPage) : undefined;
+        let modelSize = model_bytes.byteLength;
+        if (externalData) {
+          modelSize += externalData.byteLength;
+        }
+
+        logToConsoleAndPage(`model size ${Math.round(modelSize / 1024 / 1024)} MB`);
+
+        const opt = {
+          executionProviders: [provider],
+          preferredOutputLocation: {},
+        };
+
+        switch (provider) {
+          case "webgpu":
+            if (!("gpu" in navigator)) {
+              throw new Error("webgpu is NOT supported");
+            }
+            for (let i = 0; i < model_config.num_hidden_layers; ++i) {
+              opt.preferredOutputLocation[`present.${i}.key`] = 'gpu-buffer';
+              opt.preferredOutputLocation[`present.${i}.value`] = 'gpu-buffer';
+            }
+            break;
+          case "webnn":
+            if (!("ml" in navigator)) {
+              throw new Error("webnn is NOT supported");
+            }
+            break;
+        }
+
+        if (externalData !== undefined) {
+          opt.externalData = [
+            {
+              data: externalData,
+              path: model.externalDataFileRuntimePath,
+            },
+          ]
+        }
+        if (verbose) {
+          opt.logSeverityLevel = 0;
+          opt.logVerbosityLevel = 0;
+          ort.env.logLevel = "verbose";
+          ort.env.debug = true;
+        }
+
+        ort.env.webgpu.profiling = {};
+
+        this.sess = await ort.InferenceSession.create(model_bytes, opt);
+
+        if (this.trace) {
+          ort.env.trace = true;
+          ort.env.webgpu.profiling.ondata = (version, inputsMetadata, outputsMetadata, kernelId, kernelType,
+            kernelName, programName, startTime, endTime) => { };
+        }
+
+        this.eos = model_config.eos_token_id;
+        this.kv_dims = [1, model_config.num_key_value_heads, 0, model_config.hidden_size / model_config.num_attention_heads];
+        this.dtype = config.model.dtype || "float16";
+        this.num_layers = model_config.num_hidden_layers;
+        this.initilize_feed();
+      }
+
+      initilize_feed() {
+        this.feed = {};
+        const empty = (this.dtype === "float16") ? new Uint16Array() : [];
+        for (let i = 0; i < this.num_layers; ++i) {
+          this.feed[`past_key_values.${i}.key`] = new ort.Tensor(this.dtype, empty, this.kv_dims)
+          this.feed[`past_key_values.${i}.value`] = new ort.Tensor(this.dtype, empty, this.kv_dims)
+        }
+        this.output_tokens = [];
+      }
+
+
+      argmax(t) {
+        const arr = t.data;
+        const start = t.dims[2] * (t.dims[1] - 1);
+        let max = arr[start];
+        let maxidx = 0;
+
+        for (let i = 0; i < t.dims[2]; i++) {
+          const val = arr[i + start];
+          if (!isFinite(val)) {
+            throw new Error("found infinitive in logits");
+          }
+          if (val > max) {
+            max = arr[i + start];
+            maxidx = i;
+          }
+        }
+        return maxidx;
+      }
+
+      update_kv_cache(feed, outputs) {
+        for (const name in outputs) {
+          if (name.startsWith('present')) {
+            let newName = name.replace('present', 'past_key_values');
+            // free old gpu buffer
+            const t = feed[newName];
+            if (t.location === 'gpu-buffer') {
+              t.dispose();
+            }
+            feed[newName] = outputs[name];
+          }
+        }
+      }
+
+      abort() {
+        this.stop = true;
+      }
+
+      async generate(tokens, callback, options) {
+        const keep_cache = options.keep_cache;
+        const maxDecodeTokens = options.maxDecodeTokens || 256;
+        const feed = this.feed;
+        const input_ids = new ort.Tensor('int64', BigInt64Array.from(tokens.map(BigInt)), [1, tokens.length]);
+        feed['input_ids'] = input_ids;
+        this.stop = false;
+
+        if (keep_cache) {
+          this.output_tokens.push(...input_ids)
+        } else {
+          this.initilize_feed();
+          this.output_tokens = Array.from(feed['input_ids'].data);
+        }
+
+        let last_token = 0n;
+        let seqlen = this.output_tokens.length;
+        if (this.need_position_ids) {
+          if (keep_cache) {
+            feed['position_ids'] = new ort.Tensor('int64', BigInt64Array.from({ length: seqlen }, (_, i) => BigInt(i)), [1, input_ids.length]);
+          } else {
+            feed['position_ids'] = new ort.Tensor('int64', BigInt64Array.from({ length: seqlen }, (_, i) => BigInt(i)), [1, seqlen]);
+          }
+        }
+
+        const seqLengthBeforeDecoding = seqlen;
+        let firstDecodeToken = true;
+        this.generatingPerf.promptTokens = seqLengthBeforeDecoding;
+        this.generatingPerf.startTime = performance.now();
+        while (last_token != this.eos && seqlen < (maxDecodeTokens + seqLengthBeforeDecoding) && !this.stop) {
+          feed['attention_mask'] = new ort.Tensor('int64', BigInt64Array.from({ length: seqlen }, () => 1n), [1, seqlen]);
+          let outputs;
+          const decodedTokens = seqlen - seqLengthBeforeDecoding;
+          if (config.profiler === 1) {
+            if ((config.WebGPUProfileBeginToken <= decodedTokens) && ((config.WebGPUProfileEndToken === 0) || (decodedTokens < config.WebGPUProfileEndToken))) {
+              enableWebGPUProfiling(ort);
+            } else {
+              disableWebGPUProfiling(ort);
+            }
+          }
+          if (this.trace) {
+            console.timeStamp("RUN-BEGIN");
+            outputs = await this.sess.run(feed);
+            console.timeStamp("RUN-END");
+          } else {
+            outputs = await this.sess.run(feed);
+          }
+          last_token = BigInt(this.argmax(outputs.logits));
+          this.output_tokens.push(last_token);
+          if (callback /*&& !this.profiler*/) {
+            callback(this.output_tokens, last_token);
+          }
+          if (firstDecodeToken) {
+            this.generatingPerf.firstTokenDoneTime = performance.now();
+            firstDecodeToken = false;
+          }
+          this.update_kv_cache(feed, outputs);
+          feed['input_ids'] = new ort.Tensor('int64', BigInt64Array.from([last_token]), [1, 1]);
+          if (this.need_position_ids) {
+            feed['position_ids'] = new ort.Tensor('int64', BigInt64Array.from([BigInt(seqlen)]), [1, 1]);
+          }
+          seqlen = this.output_tokens.length;
+        }
+
+        this.generatingPerf.allTokensDoneTime = performance.now();
+        this.generatingPerf.decodedTokens = seqlen - seqLengthBeforeDecoding;
+
+        if (this.profiler) {
+          this.sess.endProfiling();
+        }
+        return this.output_tokens;
+      }
+    }
+
+    const config = getConfig();
+    env.localModelPath = 'models';
+    env.allowRemoteModels = config.allowRemoteTokenizer === 1;
+    env.allowLocalModels = config.allowLocalTokenizer === 1;
+    ort.env.wasm.numThreads = config.threads;
+    ort.env.wasm.simd = true;
+
+    const cons_log = [];
+
+    // let originConsoleLog;
+    // let webgpuProfilingData = [];
+    // let webgpuProfilingIndex = 0;
+    let webgpuProfilingData;
+
+    if (config.profiler === 1) {
+      /*
+      originConsoleLog = console.log;
+      console.log = function () {
+        processConsoleLog(arguments);
+        originConsoleLog.apply(this, arguments);
+      };
+      */
+      ({ webgpuProfilingData } = hookConsoleLogForProfilingDisplay(console));
+      enableProfilingResultsPanel();
+    }
+
+    if (config.profiler === 2) {
+      console.log = function (message) {
+        if (!message.includes('_fence_')) {
+          cons_log.push(message);
+        }
+      };
+    }
+
+    const tokenizer = await AutoTokenizer.from_pretrained(config.model.pretrainedTokenizerName);
+
+    function create_download_link(cons_log) {
+      if (cons_log.length > 0) {
+        let link = document.getElementById('download').childNodes[0];
+        if (link === undefined) {
+          link = document.createElement("a", "download-link");
+          link.download = "profiler.log";
+          link.innerText = "Download";
+          document.getElementById('download').appendChild(link);
+        }
+        const base64 = btoa(cons_log.join('\n'));
+        link.href = `data:application/json;base64,${base64}`;
+      }
+    }
+
+    function token_to_text(tokenizer, tokens, startidx) {
+      const txt = tokenizer.decode(tokens.slice(startidx), { skip_special_tokens: true, });
+      return txt;
+    }
+
+    const llm = new LLM();
+
+    async function main() {
+
+      const model = config.model;
+
+      await llm.load(model, {
+        provider: config.provider,
+        verbose: config.verbose,
+        profiler: config.profiler,
+        trace: config.trace,
+        local: config.local,
+      });
+
+
+      document.getElementById('status').innerText = "";
+      // const query = "Tell me about Constantinople.";
+      const query = `Write a long essay about Constantinople, introduce it in every detail.`;
+      let prompt = (model.promptBuilder || ((query) => `"<|system|>\nYou are a friendly assistant.</s>\n<|user|>\n${query}</s>\n<|assistant|>\n`))(query);
+
+      const { input_ids } = await tokenizer(prompt, { return_tensor: false, padding: true, truncation: true });
+      setPrompt(prompt);
+
+      /*
+      const generateCallbackNaive = (output_tokens) => {
+        document.getElementById('result').innerText = token_to_text(tokenizer, output_tokens, input_ids.length);
+      };
+      */
+      const pushFixLenList = (arr, maxLength, x) => {
+        arr.reverse();
+        while (arr.length >= maxLength) { arr.pop(); }
+        arr.reverse().push(x);
+      }
+      // let words = [];
+      const tokensLookBack = 1;
+      let lookBackTokens = [];
+      // let previousText = '';
+      let previousWords = [];
+      const generateCallbackSplitWord = (tokens, lastTokens) => {
+        // const lookBackString = previousWords.join('').trimStart();
+        const lookBackString =
+          lookBackTokens.length === 0 ?
+            '' :
+            tokenizer.decode(lookBackTokens, { skip_special_tokens: true, clean_up_tokenization_spaces: true });
+        const newString = tokenizer.decode([...lookBackTokens, lastTokens], { skip_special_tokens: true, clean_up_tokenization_spaces: true });
+        console.assert(newString.startsWith(lookBackString), `Expect "${newString}" starts with "${lookBackString}"`)
+        const newWord = newString.slice(lookBackString.length);
+
+        pushLLMOutput(newWord);
+
+        pushFixLenList(lookBackTokens, tokensLookBack, lastTokens);
+        // pushFixLenList(previousWords, tokensLookBack, newWord);
+      };
+      resetLLMOutputs();
+
+      // const start_timer = performance.now();
+      const output_tokens = await llm.generate(
+        input_ids,
+        generateCallbackSplitWord,
+        config);
+      // const took = (performance.now() - start_timer) / 1000;
+      const totalTime = (llm.generatingPerf.allTokensDoneTime - llm.generatingPerf.startTime) / 1000;
+      const firstTokenDecodingTime = (llm.generatingPerf.firstTokenDoneTime - llm.generatingPerf.startTime) / 1000;
+      const allButFirstTokenDecodingTime = (llm.generatingPerf.allTokensDoneTime - llm.generatingPerf.firstTokenDoneTime) / 1000;
+      // const txt = token_to_text(tokenizer, output_tokens, input_ids.length);
+      const seqlen = output_tokens.length;
+      // document.getElementById('result').innerText = txt;
+      const perf = `Total ${seqlen} tokens in ${totalTime.toFixed(1)}sec, ${(seqlen / totalTime).toFixed(2)} tokens/sec
+Decoding first token with input ${llm.generatingPerf.promptTokens} tokens:
+\t${firstTokenDecodingTime.toFixed(1)} sec
+Decoding remaining ${llm.generatingPerf.decodedTokens - 1} tokens:
+\t${allButFirstTokenDecodingTime.toFixed(1)} sec
+\t${((llm.generatingPerf.decodedTokens - 1) / allButFirstTokenDecodingTime).toFixed(2)} tokens/sec`;
+      // console.log(perf + " @@1");
+      console.log(perf);
+      document.getElementById('perfPre').innerText = perf;
+      /*
+      if (config.csv) {
+        console.assert(false, `Unreachable: config.csv`);
+        logToConsoleAndPage(`${model.name},${took.toFixed(2)},${(seqlen / took).toFixed(3)},${seqlen},@@2`);
+      }
+      */
+      // console.log(words.join(''));
+    }
+
+    try {
+      await main();
+      // profiling
+      if (config.profiler === 1) {
+        //resultElement.innerText = `${data[data.length - 1]}ms`;
+        const aggregatedTable = generateAggregatedProfilingTable(["Kernel", "Time (ms)", "Percentage (%)"], webgpuProfilingData);
+        const dataTable = generateDataTable(["Index", "Kernel", "Time (ms)", "Shape"], webgpuProfilingData);
+        // const dataTablesWrapper = document.getElementById('dataTablesWrapper');
+        // dataTablesWrapper.appendChild(aggregatedTable);
+        // dataTablesWrapper.appendChild(dataTable);
+        addDataTable(aggregatedTable, 'Aggregated time');
+        addDataTable(dataTable, 'Detailed time');
+      }
+    } catch (error) {
+      console.error(error);
+      document.getElementById('status').innerText = error.message;
+    } finally {
+      //create_download_link(cons_log);
+    }
+  </script>
+
+  <pre id="status"></pre>
+  <br />
+  <div id="profilingResultsPanel"> </div>
+  <br />
+  <div id="prompt"></div>
+  <br />
+  <div id="result"></div>
+  <br />
+  <div id="perf">
+    <pre id="perfPre"></pre>
+  </div>
+  <br />
+  <div id="download"></div>
+  <br />
+</body>
