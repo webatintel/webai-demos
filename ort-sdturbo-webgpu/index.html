@@ -296,22 +296,35 @@
 
         if (config.profiler === 1) {
           if ((config.WebGPUProfileBeginRound <= this.generatedRounds) && ((config.WebGPUProfileEndRound === 0) || (this.generatedRounds < config.WebGPUProfileEndRound))) {
-            enableWebGPUProfiling(ort);
+            // enableWebGPUProfiling(ort);
             this.latestRoundProfiled = true;
+            logToConsoleAndPage('This round is WebGPU profiled.');
           } else {
-            disableWebGPUProfiling(ort);
+            // disableWebGPUProfiling(ort);
             this.latestRoundProfiled = false;
           }
         } else {
-          disableWebGPUProfiling(ort);
+          // disableWebGPUProfiling(ort);
           this.latestRoundProfiled = false;
         }
+        // runWithProfiling run task, with WebGPU profiling enabled if latestRoundProfiled===True and useProfiling===True
+        const runWithProfiling = async (useProfiling, task) => {
+          if (this.latestRoundProfiled && useProfiling) {
+            enableWebGPUProfiling(ort);
+          }
+          await task();
+          disableWebGPUProfiling(ort);
+        };
 
         // text-encoder
         let start = performance.now();
         const executionStart = performance.now();
         const textEncoderOutputs = { last_hidden_state: textEncoderOutputsTensor };
-        await models.text_encoder.sess.run({ "input_ids": new ort.Tensor("int32", input_ids, [1, input_ids.length]) }, textEncoderOutputs);
+        await runWithProfiling(
+          config.profilingModels.includes('text_encoder'),
+          async () => {
+            await models.text_encoder.sess.run({ "input_ids": new ort.Tensor("int32", input_ids, [1, input_ids.length]) }, textEncoderOutputs);
+          });
 
         let perf_info = [`text_encoder: ${(performance.now() - start).toFixed(1)}ms`];
 
@@ -324,7 +337,12 @@
           };
           const unetOutSampleOutputs = { out_sample: unetOutSampleTensor };
           // const { out_sample } = await models.unet.sess.run(feed, unetOutSampleOutputs);
-          await models.unet.sess.run(feed, unetOutSampleOutputs);
+          // await models.unet.sess.run(feed, unetOutSampleOutputs);
+          await runWithProfiling(
+            config.profilingModels.includes('unet'),
+            async () => {
+              await models.unet.sess.run(feed, unetOutSampleOutputs);
+            });
           perf_info.push(`unet: ${(performance.now() - start).toFixed(1)}ms`);
 
           this.webgpuSteps.stepLatentSpace();
@@ -332,7 +350,12 @@
           start = performance.now();
           const vaeDecodeInputs = { latent_sample: unetOutSampleTensor };
           const decodedOutputs = { sample: decodedOutputsTensor };
-          await models.vae_decoder.sess.run(vaeDecodeInputs, decodedOutputs);
+          // await models.vae_decoder.sess.run(vaeDecodeInputs, decodedOutputs);
+          await runWithProfiling(
+            config.profilingModels.includes('vae_decoder'),
+            async () => {
+              await models.vae_decoder.sess.run(vaeDecodeInputs, decodedOutputs);
+            });
           // profiling
           // ort.env.webgpu.profiling = { mode: "" };
 
