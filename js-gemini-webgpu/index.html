@@ -4,7 +4,7 @@
   <div id="wps"></div>
   <div id="tps"></div>
   <p></p>
-  <div id="input">Prompt: Write me an extra-long poem</div>
+  <div id="input">Prompt: Write me an long poem</div>
   <p></p>
   <div>Output:</div>
   <div id="output"></div>
@@ -15,14 +15,14 @@
   import { env, AutoTokenizer } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
   async function main() {
-    const { available, defaultTemperature, defaultTopK, maxTopK } = await ai.assistant.capabilities();
+    const { available, defaultTemperature, defaultTopK, maxTopK } = await ai.languageModel?.capabilities();
 
     if (available === 'no') {
       console.log('AI assistant is not available');
       return;
     }
 
-    const session = await ai.assistant.create();
+    const session = await ai.languageModel.create();
     const input = document.getElementById("input").innerHTML;
     const outputElement = document.getElementById("output");
     const wpsElement = document.getElementById("wps");
