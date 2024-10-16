@@ -63,6 +63,17 @@
 
     const phiModelsPromptBuilder = (query) => `User:${query}\nAssistant:`;
     const MODELS = {
+      "phi3.5": {
+        name: "phi3.5",
+        hfTreeFullName: "onnx-community/Phi-3.5-mini-instruct-onnx-web",
+        wp27TreeFullName: "Phi-3.5-mini-instruct-onnx-web",
+        configFileRelatedPath: "config.json",
+        modelOnnxFileRelatedPath: "onnx/model_q4f16.onnx",
+        externalDataFileRelatedPath: "onnx/model_q4f16.onnx_data",
+        externalDataFileRuntimePath: "model_q4f16.onnx_data",
+        pretrainedTokenizerName: "phi3.5-int4",
+        promptBuilder: phiModelsPromptBuilder,
+      },
       "phi3": {
         name: "phi3",
         hfTreeFullName: "webai-community/models",

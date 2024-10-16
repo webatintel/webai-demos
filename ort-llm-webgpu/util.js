@@ -5,7 +5,7 @@ async function loadScript(url) {
     script.onerror = reject;
     script.src = url;
     if (url.startsWith('http')) {
-      script.crossOrigin = 'anonymous';
+      // script.crossOrigin = 'anonymous';
     }
     document.body.append(script);
   })

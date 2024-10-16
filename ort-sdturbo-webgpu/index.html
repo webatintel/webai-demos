@@ -65,6 +65,8 @@
       // comma-seperated list of {unet, text_encoder, vae_decoder}
       // E.g. "all" == "text_encoder,unet,vae_decoder"
       profilingModels: "all",
+      // If waitForEachSessionRun, await WebGPU device complete all work after each ORT session run.
+      waitForEachSessionRun: 0,
 
 
       // Pixel size is fixed for ort model
@@ -313,6 +315,9 @@
             enableWebGPUProfiling(ort);
           }
           await task();
+          if (config.waitForEachSessionRun) {
+            await ort.env.webgpu.device.queue.onSubmittedWorkDone();
+          }
           disableWebGPUProfiling(ort);
         };
 
