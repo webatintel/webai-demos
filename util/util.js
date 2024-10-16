@@ -26,15 +26,24 @@ async function getModelOPFS(name, url, updateModel = false) {
   }
 }
 
-function getParam(name) {
-  name = name.replace(/[\[\]]/g, '\\$&');
-  let regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)', 'i');
+function getParam(name, type, _default) {
+  name = name.replace(/[\[\]]/g, "\\$&");
+  let regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)", "i");
   let results = regex.exec(window.location.href);
-  if (!results)
-    return null;
-  if (!results[2])
-    return '';
-  return decodeURIComponent(results[2].replace(/\+/g, ' '));
+  if (!results || !results[2]) return _default;
+
+  const result = decodeURIComponent(results[2].replace(/\+/g, " "));
+  if (type === "Boolean") {
+    if (result === "true") {
+      return true;
+    } else if (result === "false") {
+      return false;
+    }
+  } else if (type === "Number") {
+    return parseInt(result);
+  } else {
+    return result;
+  }
 }
 
 function getSum(data) {

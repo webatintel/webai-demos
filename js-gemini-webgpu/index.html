@@ -9,6 +9,7 @@
   <div>Output:</div>
   <div id="output"></div>
 </div>
+<script src="../util/util.js"></script>
 <script type="module">
   "use strict";
 
@@ -22,13 +23,14 @@
       return;
     }
 
+    const prompt = getParam("prompt", "String", "Prompt: Write me an long poem");
+    document.getElementById("input").innerHTML = prompt;
     const session = await ai.languageModel.create();
-    const input = document.getElementById("input").innerHTML;
     const outputElement = document.getElementById("output");
     const wpsElement = document.getElementById("wps");
     const tpsElement = document.getElementById("tps");
     let previousLength = 0;
-    const stream = session.promptStreaming(input);
+    const stream = session.promptStreaming(prompt);
     const startTime = performance.now();
     let endTime, elapsedTime, wordCount, wps;
     for await (const chunk of stream) {
