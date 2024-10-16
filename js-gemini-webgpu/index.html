@@ -12,7 +12,7 @@
 <script type="module">
   "use strict";
 
-  import { env, AutoTokenizer } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
+  //import { env, AutoTokenizer } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
   async function main() {
     const { available, defaultTemperature, defaultTopK, maxTopK } = await ai.languageModel?.capabilities();
@@ -41,12 +41,15 @@
       wpsElement.innerHTML = `words/s: ${wps}`;
     }
 
+    /*
     env.allowLocalModels = true;
     env.localModelPath = 'models';
     const tokenizer = await AutoTokenizer.from_pretrained('Xenova/gemma-tokenizer');
     const tokenIds = tokenizer.encode(outputElement.innerHTML);
     const tokenCount = tokenIds.length;
     const tps = (tokenCount / (elapsedTime / 1000)).toFixed(2);
+    */
+    const tps = (session.tokensSoFar / (elapsedTime / 1000)).toFixed(2);
     tpsElement.innerHTML = `tokens/s: ${tps}`;
   }
 
