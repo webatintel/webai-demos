@@ -23,7 +23,7 @@
       return;
     }
 
-    const prompt = getParam("prompt", "String", "Prompt: Write me an long poem");
+    const prompt = getParam("prompt", "String", "Prompt: Write me a long poem");
     document.getElementById("input").innerHTML = prompt;
     const session = await ai.languageModel.create();
     const outputElement = document.getElementById("output");
